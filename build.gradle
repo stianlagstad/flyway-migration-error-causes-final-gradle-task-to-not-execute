@@ -1,0 +1,80 @@
+plugins {
+    id "com.bmuschko.docker-remote-api" version "3.0.11"
+    id "org.flywaydb.flyway" version "4.2.0"
+}
+
+apply plugin: 'java'
+apply plugin: 'application'
+apply plugin: 'com.bmuschko.docker-remote-api'
+
+repositories {
+    mavenCentral()
+}
+
+flyway {
+    url = 'jdbc:postgresql://127.0.0.1:5432/myDatabase'
+    user = 'myDatabaseUser'
+    password = 'myDatabasePassword'
+}
+
+ext {
+    dockerDatabaseId = 'my_docker_test_database'
+    dockerDatabaseName = 'my_docker_test_database'
+}
+
+dependencies {
+    compile("org.postgresql:postgresql:9.4.1212")
+    compile("org.flywaydb:flyway-core:4.0.3")
+}
+
+/**
+ * Docker test database configuration
+ */
+import com.bmuschko.gradle.docker.tasks.container.*
+import com.bmuschko.gradle.docker.tasks.image.*
+task buildTestDatabaseImage(type: DockerBuildImage) {
+    inputDir = file('docker')
+    tag = 'test/database'
+}
+task createTestDatabaseContainer(type: DockerCreateContainer) {
+    dependsOn buildTestDatabaseImage
+    targetImageId { buildTestDatabaseImage.getImageId() }
+    portBindings = ['5432:5432']
+    containerId = dockerDatabaseId
+    containerName = dockerDatabaseName
+    doLast {
+        println '\nheyhey I\'m inside createTestDatabaseContainer\n'
+    }
+}
+task startTestDatabaseContainer(type: DockerStartContainer) {
+    dependsOn createTestDatabaseContainer
+    targetContainerId { dockerDatabaseId }
+    doLast {
+        println '\nheyhey I\'m inside startTestDatabaseContainer\n'
+    }
+}
+startTestDatabaseContainer.doLast {
+    // Add some delay so that the database has time to start. TODO: Find a way to check that the database has started.
+    sleep 6000
+}
+task stopTestDatabaseContainer(type: DockerStopContainer) {
+    doLast {
+        println '\nheyhey I\'m inside stopTestDatabaseContainer\n'
+    }
+    targetContainerId { dockerDatabaseId }
+}
+task removeTestDatabaseContainer(type: DockerRemoveContainer) {
+    dependsOn stopTestDatabaseContainer
+    doLast {
+        println '\nheyhey I\'m inside removeTestDatabaseContainer\n'
+    }
+    targetContainerId { dockerDatabaseId }
+}
+
+task validateMigration {
+    dependsOn startTestDatabaseContainer
+    dependsOn flywayMigrate
+    finalizedBy removeTestDatabaseContainer
+    flywayMigrate.mustRunAfter startTestDatabaseContainer
+    removeTestDatabaseContainer.mustRunAfter flywayValidate
+}
