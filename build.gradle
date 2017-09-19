@@ -74,7 +74,6 @@ task removeTestDatabaseContainer(type: DockerRemoveContainer) {
 task validateMigration {
     dependsOn startTestDatabaseContainer
     dependsOn flywayMigrate
-    finalizedBy removeTestDatabaseContainer
+    flywayMigrate.finalizedBy removeTestDatabaseContainer
     flywayMigrate.mustRunAfter startTestDatabaseContainer
-    removeTestDatabaseContainer.mustRunAfter flywayValidate
 }
