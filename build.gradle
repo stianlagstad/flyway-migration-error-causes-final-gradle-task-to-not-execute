@@ -1,11 +1,9 @@
 plugins {
     id "com.bmuschko.docker-remote-api" version "3.0.11"
     id "org.flywaydb.flyway" version "4.2.0"
+    id "java"
+    id "application"
 }
-
-apply plugin: 'java'
-apply plugin: 'application'
-apply plugin: 'com.bmuschko.docker-remote-api'
 
 repositories {
     mavenCentral()
@@ -27,15 +25,15 @@ dependencies {
     compile("org.flywaydb:flyway-core:4.0.3")
 }
 
-/**
- * Docker test database configuration
- */
 import com.bmuschko.gradle.docker.tasks.container.*
 import com.bmuschko.gradle.docker.tasks.image.*
+
 task buildTestDatabaseImage(type: DockerBuildImage) {
     inputDir = file('docker')
+    remove true
     tag = 'test/database'
 }
+
 task createTestDatabaseContainer(type: DockerCreateContainer) {
     dependsOn buildTestDatabaseImage
     targetImageId { buildTestDatabaseImage.getImageId() }
@@ -43,38 +41,39 @@ task createTestDatabaseContainer(type: DockerCreateContainer) {
     containerId = dockerDatabaseId
     containerName = dockerDatabaseName
     doLast {
-        println '\nheyhey I\'m inside createTestDatabaseContainer\n'
+        println "I'm inside createTestDatabaseContainer"
     }
 }
+
+task removeTestDatabaseContainer(type: DockerRemoveContainer) {
+    targetContainerId { dockerDatabaseId }
+    doLast {
+        println "I'm inside removeTestDatabaseContainer"
+    }
+}
+
+task stopTestDatabaseContainer(type: DockerStopContainer) {
+    targetContainerId { dockerDatabaseId }
+    finalizedBy removeTestDatabaseContainer
+    doLast {
+        println "I'm inside stopTestDatabaseContainer"
+    }
+}
+
 task startTestDatabaseContainer(type: DockerStartContainer) {
     dependsOn createTestDatabaseContainer
     targetContainerId { dockerDatabaseId }
+    finalizedBy stopTestDatabaseContainer
     doLast {
-        println '\nheyhey I\'m inside startTestDatabaseContainer\n'
+        println "I'm inside startTestDatabaseContainer"
     }
-}
-startTestDatabaseContainer.doLast {
-    // Add some delay so that the database has time to start. TODO: Find a way to check that the database has started.
-    sleep 6000
-}
-task stopTestDatabaseContainer(type: DockerStopContainer) {
     doLast {
-        println '\nheyhey I\'m inside stopTestDatabaseContainer\n'
+      sleep 6000
     }
-    targetContainerId { dockerDatabaseId }
-}
-task removeTestDatabaseContainer(type: DockerRemoveContainer) {
-    dependsOn stopTestDatabaseContainer
-    doLast {
-        println '\nheyhey I\'m inside removeTestDatabaseContainer\n'
-    }
-    targetContainerId { dockerDatabaseId }
 }
 
 task validateMigration {
     dependsOn startTestDatabaseContainer
     dependsOn flywayMigrate
-    finalizedBy removeTestDatabaseContainer
     flywayMigrate.mustRunAfter startTestDatabaseContainer
-    removeTestDatabaseContainer.mustRunAfter flywayValidate
 }
